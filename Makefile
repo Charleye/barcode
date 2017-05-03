@@ -15,7 +15,7 @@ AR = $(CROSS_COMPILE)ar
 RM = rm -f
 
 CFLAGS	+= -mcpu=cortex-a9 -march=armv7-a -mfloat-abi=softfp -mfpu=neon -O2
-LDFLAGS += -O2
+LDFLAGS += -O2 -std=c++11
 LIBS = -lv4l2 -ljpeg -lv4lconvert
 
 libs-y	:= lib/
@@ -46,7 +46,7 @@ barcode_v4l2 : FORCE image_process.o
 
 image_process.o: image_process.cpp
 	@echo "  $(notdir $(CXX)) $@"
-	@$(CXX) -o $@ $< -c
+	@$(CXX) -o $@ $< -c -std=c++11
 
 PHONY += scp
 scp:
