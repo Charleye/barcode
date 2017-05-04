@@ -113,7 +113,6 @@ void correction(Mat& image, Mat &dete)
     float pi_180 = (float)CV_PI / 180.0;
     Mat lineImage(magImage.size(), CV_8UC3);
     Mat tmp1(magImage.size(), CV_8UC3);
-    magImage.copyTo(tmp1);
     do {
         threshold(magImage, tmp1, thresh, 255, CV_THRESH_BINARY);
         HoughLines(tmp1, lines, 1, pi_180, 90, 0, 0);
@@ -122,18 +121,14 @@ void correction(Mat& image, Mat &dete)
 
     while (lines.size() > 2)
     {
-        thresh += 1;
+        thresh += 2;
         threshold(magImage, tmp1, thresh, 255, CV_THRESH_BINARY);
         HoughLines(tmp1, lines, 1, pi_180, 90, 0, 0);
     }
 
     int numLines = lines.size();
     float theta;
-    cout << "numLines: " << numLines << endl;
     for (int i = 0; i < numLines; i++) {
-        cout << "theta: " << lines[i][1] * 180 / CV_PI << endl;
-        cout << "RHO: " << lines[i][0] << endl;
-
         float rho = lines[i][0];
         theta = lines[i][1];
         Point pt1, pt2;
@@ -145,20 +140,11 @@ void correction(Mat& image, Mat &dete)
         pt2.y = cvRound(y0 - 1000 * (a));
         line(lineImage, pt1, pt2, Scalar(245, 200, 0), 3, 8, 0);
     }
-    float angle = 0;
-    if (abs(180 * theta / CV_PI - 90) < 2 || abs(180 * theta / CV_PI - 180) < 2)
-        angle = 0;
-    else if (180 * theta / CV_PI < 90)
-        angle = 180 * theta / CV_PI  + 270;
-    else
-        angle = 180 * theta / CV_PI - 90;
-
-    cout << "Angle: " << angle << endl;
+    float angle = 180 * theta / CV_PI - 90;
 
     Point center(image.cols / 2, image. rows / 2);
     Mat rotMat = getRotationMatrix2D(center, angle, 1.0);
     warpAffine(image, image, rotMat, image.size(), 1, 0, Scalar(255, 255, 255));
-
 }
 
 void getBarCode(Mat &dst)
@@ -198,14 +184,14 @@ void image_process(unsigned char *image, int width, int height)
     cvtColor(src, dst, CV_YUV2BGR_YUYV);
 
     Mat origin;
-    resize(dst, origin, Size(600, 400), 0, 0);
+    resize(dst, origin, Size(400, 400), 0, 0);
     imshow("Capture Image", origin);
 
-//    Mat dete = detection(dst);
-//    correction(dst, dete);
+    Mat dete = detection(dst);
+    correction(dst, dete);
     getBarCode(dst);
 
-    resize(dst, dst, Size(600, 400), 0, 0);
+    resize(dst, dst, Size(400, 400), 0, 0);
     imshow("Result", dst);
 
     waitKey(0);
