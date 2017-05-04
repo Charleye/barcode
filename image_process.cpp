@@ -1,5 +1,7 @@
 #include <opencv2/opencv.hpp>
+#include <zbar.h>
 
+using namespace zbar;
 using namespace std;
 using namespace cv;
 
@@ -65,6 +67,7 @@ void correction(Mat& image, Mat &dete)
 {
     Mat gray;
     cvtColor(dete, gray, CV_BGR2GRAY);
+    GaussianBlur(gray, gray, Size(7, 7), 0);
 
     Mat imgX16S, imgY16S, SobelOut;
     Sobel(gray, imgX16S, CV_16S, 1, 0, 3, 1, 0, 4);
@@ -102,7 +105,86 @@ void correction(Mat& image, Mat &dete)
     q3.copyTo(q1);
     tmp.copyTo(q3);
     normalize(magMat, magMat, 0, 1, CV_MINMAX);
-    imshow("magMat", magMat);
+    Mat magImage(magMat.size(), CV_8UC1);
+    magMat.convertTo(magImage, CV_8UC1, 255, 0);
+
+    int thresh = 190;
+    vector<Vec2f> lines;
+    float pi_180 = (float)CV_PI / 180.0;
+    Mat lineImage(magImage.size(), CV_8UC3);
+    Mat tmp1(magImage.size(), CV_8UC3);
+    magImage.copyTo(tmp1);
+    do {
+        threshold(magImage, tmp1, thresh, 255, CV_THRESH_BINARY);
+        HoughLines(tmp1, lines, 1, pi_180, 90, 0, 0);
+        thresh -= 4;
+    }while(lines.size() < 3 && thresh > 120);
+
+    while (lines.size() > 2)
+    {
+        thresh += 1;
+        threshold(magImage, tmp1, thresh, 255, CV_THRESH_BINARY);
+        HoughLines(tmp1, lines, 1, pi_180, 90, 0, 0);
+    }
+
+    int numLines = lines.size();
+    float theta;
+    cout << "numLines: " << numLines << endl;
+    for (int i = 0; i < numLines; i++) {
+        cout << "theta: " << lines[i][1] * 180 / CV_PI << endl;
+        cout << "RHO: " << lines[i][0] << endl;
+
+        float rho = lines[i][0];
+        theta = lines[i][1];
+        Point pt1, pt2;
+        double a = cos(theta), b = sin(theta);
+        double x0 = a * rho, y0 = b * rho;
+        pt1.x = cvRound(x0 + 1000 * (-b));
+        pt1.y = cvRound(y0 + 1000 * (a));
+        pt2.x = cvRound(x0 - 1000 * (-b));
+        pt2.y = cvRound(y0 - 1000 * (a));
+        line(lineImage, pt1, pt2, Scalar(245, 200, 0), 3, 8, 0);
+    }
+    float angle = 0;
+    if (abs(180 * theta / CV_PI - 90) < 2 || abs(180 * theta / CV_PI - 180) < 2)
+        angle = 0;
+    else if (180 * theta / CV_PI < 90)
+        angle = 180 * theta / CV_PI  + 270;
+    else
+        angle = 180 * theta / CV_PI - 90;
+
+    cout << "Angle: " << angle << endl;
+
+    Point center(image.cols / 2, image. rows / 2);
+    Mat rotMat = getRotationMatrix2D(center, angle, 1.0);
+    warpAffine(image, image, rotMat, image.size(), 1, 0, Scalar(255, 255, 255));
+
+}
+
+void getBarCode(Mat &dst)
+{
+    Mat gray;
+    cvtColor(dst, gray, CV_BGR2GRAY);
+
+    ImageScanner scanner;
+    scanner.set_config(ZBAR_EAN13, ZBAR_CFG_ENABLE, 1);
+    scanner.set_config(ZBAR_UPCA, ZBAR_CFG_ENABLE, 1);
+    int width = gray.cols;
+    int height = gray.rows;
+    Image image(width, height, "Y800", gray.data, width*height);
+    scanner.scan(image);
+    Image::SymbolIterator symbol = image.symbol_begin();
+    if (image.symbol_begin() == image.symbol_end())
+    {
+        cout << "Fail to identify bar code in the picture, Capture image again.\n" << endl;
+        return;
+    }
+    for (; symbol != image.symbol_end(); ++symbol)
+    {
+        cout << endl;
+        cout << "BarCode Type:  " << symbol->get_type_name() << endl << endl;;
+        cout << "Bar Code Number:   " << symbol->get_data() << endl << endl;;
+    }
 }
 
 #ifdef __cplusplus
@@ -115,9 +197,16 @@ void image_process(unsigned char *image, int width, int height)
     Mat dst(width, height, CV_8UC3);
     cvtColor(src, dst, CV_YUV2BGR_YUYV);
 
-    Mat dete = detection(dst);
-    correction(dst, dete);
-    imshow("dete", dete);
+    Mat origin;
+    resize(dst, origin, Size(600, 400), 0, 0);
+    imshow("Capture Image", origin);
+
+//    Mat dete = detection(dst);
+//    correction(dst, dete);
+    getBarCode(dst);
+
+    resize(dst, dst, Size(600, 400), 0, 0);
+    imshow("Result", dst);
 
     waitKey(0);
 }
